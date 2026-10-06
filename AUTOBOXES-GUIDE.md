@@ -1,11 +1,23 @@
 # Auto Boxes - the guide
 
-Make a block that is **bigger than one block** clickable and solid everywhere you can see it. The size
-is measured **automatically** from the block's own model - you never write a box.
+# What Auto Boxes does
+
+**1. It measures your block's model and gives it a selection box and a collision box of the right size -
+automatically.** You never write a `selectionbox` or `collisionbox` again, and never have to check that
+they match the model. Change the model, and the boxes change with it. It works out every part of the model
+where the game draws it - turned, scaled, inside its parent - and puts one box round the whole thing. If
+your block faces different ways, the box turns with it (by its north / east / south / west versions
+automatically; if your own code turns it, see 2C).
+
+**2. If your block is bigger than one block, it makes the whole of it clickable and solid.** The game
+normally only lets you click or bump into the part of a block inside its own space. Auto Boxes fixes that
+with an invisible **filler** - explained below.
+
+So: **any** block gets correct boxes without writing them, and **big** blocks also get the filler.
 
 ---
 
-# When and why you need the filler
+# When and why the filler is used
 
 ## The problem
 
@@ -43,13 +55,13 @@ space above the statue. Now the game finds a block there, and the filler:
 A space that already holds something (a wall, water, another block) is left alone - that part of your
 block just is not clickable there. Fillers never replace anything a player built.
 
-## Do you need it?
+## What your block gets
 
-| Your block... | Filler needed? |
-|---|---|
-| fits inside one block | **No** - the game already handles it. (Having the kit in your mod does no harm: no filler is ever placed.) |
-| sticks out into the next space - taller, longer or wider than one block | **Yes** - that is what Auto Boxes is for |
-| only pokes out a tiny bit (less than 1/32 of a block - half a pixel) | **No** - that small an overhang stays part of its own block's box |
+| Your block... | Boxes measured from the model | Filler |
+|---|---|---|
+| fits inside one block | **Yes** - correct selection and collision box, nothing written | not used - none is ever placed (having it in the mod does no harm) |
+| sticks out into the next space - taller, longer or wider than one block | **Yes** - one box round the whole model | **Yes** - in every empty space it reaches |
+| only pokes out a tiny bit (less than 1/32 of a block - half a pixel) | **Yes** | not used - that small an overhang stays part of its own block's box |
 
 Good to know:
 
@@ -112,7 +124,15 @@ In `AutoBoxes.cs`, find this line:
     public const string FillerCode = "mymod:autoboxesfiller";   // CHANGE: your mod id (lowercase) before the colon
 ```
 
-Change `mymod` to **your mod id**, e.g. `"bookends:autoboxesfiller"`.
+Change `mymod` to **your mod id** - exactly the `"modid"` in your `modinfo.json`, not a short name. For
+example Desk Picture Frames' `modinfo.json` says `"modid": "deskpictureframe"`, so its line is:
+
+```csharp
+    public const string FillerCode = "deskpictureframe:autoboxesfiller";   // CHANGE: your mod id (lowercase) before the colon
+```
+
+(Not `"dpf:..."` - the game files every block under its mod's real id. Get this wrong and nothing breaks,
+but big blocks silently get no fillers.)
 
 ## 4. Register the filler
 
@@ -130,8 +150,10 @@ Paste under it:
         api.RegisterBlockEntityClass("MyModAutoBoxesFiller", typeof(BEAutoBoxesFiller));
 ```
 
-and change `MyMod` **inside the quotes** to your mod's name (e.g. `"BookendsAutoBoxesFiller"`) - every
-mod's filler needs its own name.
+and change `MyMod` **inside the quotes** to any name of your own - a short version of your mod's name is
+good (e.g. `"DPFAutoBoxesFiller"`). No other mod may use the same name. Keep `BlockAutoBoxesFiller` and
+`BEAutoBoxesFiller` in `typeof(...)` exactly as they are - those are the filler's own classes, **not** your
+block's.
 
 Your mod has no `Start` method? Paste this whole method inside your ModSystem class instead:
 
@@ -145,23 +167,33 @@ Your mod has no `Start` method? Paste this whole method inside your ModSystem cl
 
 ## 5. Name the filler in its JSON
 
-Open `autoboxesfiller.json` (the one you copied into `assets/mymod/blocktypes/`). Change these two lines
-to the **same name** you used in step 4:
+Open `autoboxesfiller.json` (the one you copied into `assets/mymod/blocktypes/` in step 1 - it **must** be
+there, or big blocks get no fillers). Change these two lines to the **same name** you used in step 4 -
+the filler's name, **not** your block's class names:
 
 ```json
   "class": "MyModAutoBoxesFiller",
   "entityClass": "MyModAutoBoxesFiller",
 ```
 
+**The names, all in one place:**
+
+| Name | Where it goes | Your choice? |
+|---|---|---|
+| `MyModAutoBoxesFiller` | in quotes in step 4's two lines, and `"class"` / `"entityClass"` in the filler JSON (step 5) | **Yes** - any name, the same in all four spots, not used by another mod |
+| `autoboxesfiller` | `"code"` in the filler JSON, and after the colon in `FillerCode` (step 3) | **Yes** - any name, the same in both spots |
+| `mymod` | before the colon in `FillerCode` (step 3) | **No** - your mod id, exactly as in `modinfo.json` |
+
 **Part 1 is done.** You never do it again for this mod.
 
 ---
 
-# PART 2 - for each big block
+# PART 2 - your blocks
 
 Does your block already have its own `BE...` class and `Block...` class?
 
-- **No** - it is only a JSON file -> do **2A**.
+- **No** - it is only a JSON file -> do **2A** (only once per mod - after that, other plain blocks just
+  need two lines in their JSON, see **Your block's JSON**).
 - **Yes** -> do **2B** (and **2C** if your block entity turns the model itself - 2C says how to tell).
 
 ---
@@ -550,6 +582,111 @@ angle there too.
 
 ---
 
+# Your block's JSON
+
+## The two lines that connect it to the code
+
+A block's JSON says which code runs it with two lines:
+
+```json
+  "class": "MyModYourBlock",
+  "entityClass": "MyModYourBlock",
+```
+
+- `"class"` = the name in quotes in your `api.RegisterBlockClass(...)` line.
+- `"entityClass"` = the name in quotes in your `api.RegisterBlockEntityClass(...)` line.
+
+They must be spelled **exactly** the same (capitals too). Both are needed: the block class shows the boxes,
+the block entity measures them and looks after the fillers.
+
+- **2A** (new code): you add these two lines (step 2A.3).
+  **Several blocks can use the same two names.** The 2A code is not tied to one block - it measures
+  whichever block it is on. So do 2A **once**, and every other plain block in your mod only needs these
+  two lines. The statue and the bench below use the same ones.
+- **2B** (existing code): your JSON already has them - nothing to do.
+
+## Old box lines - optional
+
+If your block's JSON already has any of these, you **can leave them** - it works either way:
+
+```json
+  "selectionbox": { ... },
+  "selectionboxes": [ ... ],
+  "collisionbox": { ... },
+  "collisionboxes": [ ... ],
+```
+
+Auto Boxes is asked first; the written boxes are only used if a block has no auto boxes. Deleting them is
+just tidying, so nobody later thinks they still do something.
+
+## A whole example
+
+A plain block with no code of its own, after 2A - the statue, 2.5 blocks tall:
+
+```json
+{
+  "code": "statue",
+  "class": "MyModYourBlock",
+  "entityClass": "MyModYourBlock",
+  "shape": { "base": "mymod:block/statue" },
+  "textures": { "all": { "base": "game:block/stone/rock/granite1" } },
+  "blockmaterial": "Stone",
+  "resistance": 1.5,
+  "sidesolid": { "all": false },
+  "sideopaque": { "all": false },
+  "creativeinventory": { "general": ["*"] }
+}
+```
+
+No box anywhere - it is measured from `mymod:block/statue`. `sidesolid` / `sideopaque` false, because a
+statue does not fill its whole block (otherwise the blocks next to it would hide their faces).
+
+## What the measuring follows from your JSON - by itself
+
+| In your JSON | What happens to the box |
+|---|---|
+| `"shape": { "base": "..." }` | the box is measured from this model |
+| `"shapeByType": { ... }` - a different model per variant | each variant is measured from **its own** model |
+| `"rotateY"` / `"rotateYByType"` in the shape (also `rotateX`, `rotateZ`) | the box is **turned** the same way - e.g. a block with north / east / south / west variants |
+| `"ignoreElements": [ "..." ]` in the shape | those parts are left out of the box as well |
+
+Example - a bench that faces the way you place it, using the game's `HorizontalOrientable`:
+
+```json
+{
+  "code": "bench",
+  "class": "MyModYourBlock",
+  "entityClass": "MyModYourBlock",
+  "behaviors": [ { "name": "HorizontalOrientable" } ],
+  "variantgroups": [ { "code": "side", "loadFromProperties": "abstract/horizontalorientation" } ],
+  "shapeByType": {
+    "*-north": { "base": "mymod:block/bench", "rotateY": 0 },
+    "*-east":  { "base": "mymod:block/bench", "rotateY": 270 },
+    "*-south": { "base": "mymod:block/bench", "rotateY": 180 },
+    "*-west":  { "base": "mymod:block/bench", "rotateY": 90 }
+  },
+  "textures": { "all": { "base": "game:block/wood/planks/oak1" } },
+  "sidesolid": { "all": false },
+  "sideopaque": { "all": false },
+  "creativeinventory": { "general": ["*-north"] }
+}
+```
+
+Every facing gets its box turned to match - nothing to write per facing.
+
+## What it does NOT follow
+
+| In your JSON | So... |
+|---|---|
+| `"offsetX"` / `"offsetY"` / `"offsetZ"` in the shape | the box does not move with it - move the model in the model file instead |
+| `"scale"` in the shape | the box is not scaled - scale the model in the model file instead |
+| `"selectiveElements"` | ignored - the whole model is measured (use `ignoreElements` to leave parts out) |
+| `"alternates"` (random looks) | only the main `base` model is measured |
+| `"overlays"` | not counted |
+| a model turned by your **code** (an angle in the block entity) | see **2C** |
+
+---
+
 # Test it
 
 1. Build your mod and start the game.
@@ -566,7 +703,7 @@ A block placed **before** you added Auto Boxes gets no fillers - break it and pl
 |---|---|
 | Build error: `AutoBoxes` / `IAutoBoxesOwner` / `AutoBoxesMeasure` not found | step 1 (the three files are in your code folder) and step 2 (their `namespace` line is the SAME as the one at the top of your own file) |
 | Build error: `Dictionary` / `List` / `Cuboidf` not found | B1 / B10 - the `using` lines at the top of your file |
-| Only its own block is clickable, nothing outside | step 3 (`FillerCode` has your mod id) and step 5 (the filler JSON's names match step 4) |
+| Only its own block is clickable, nothing outside | step 3 (`FillerCode` has your mod id EXACTLY as in `modinfo.json`), the filler JSON is in `assets/<your mod id>/blocktypes/` (step 1), and its names match step 4 (step 5) |
 | Game log: block class / entity class not found | the names in quotes in step 4 / 2A.2 match the JSON names |
 | Game log: `Could not measure` | the block's model path in its JSON (`shape` -> `base`) |
 | The box does not turn with the block | **2C** - your block entity turns its model itself |
