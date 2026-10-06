@@ -1,0 +1,42 @@
+{
+  "code": "autoboxesfiller",
+  "class": "MyModAutoBoxesFiller",
+  "entityClass": "MyModAutoBoxesFiller",
+  "drawtype": "json",
+  "shape": {
+    "base": "game:block/basic/nothing"
+  },
+  "textures": {
+    "all": {
+      "base": "game:block/wood/planks/oak1"
+    }
+  },
+  "blockmaterial": "Other",
+  "resistance": 1,
+  "lightAbsorption": 0,
+  "renderpass": "OpaqueNoCull",
+  "sideopaque": {
+    "all": false
+  },
+  "sidesolid": {
+    "all": false
+  },
+  "sideao": {
+    "all": false
+  },
+  "collisionBoxes": [],
+  "replaceable": 0,
+  "rainPermeable": true,
+  "drops": [],
+  "attributes": {
+    "handbook": {
+      "exclude": true
+    }
+  },
+  "sounds": {
+    "place": "game:block/leather",
+    "break": "game:block/leather",
+    "hit": "game:block/leather"
+  },
+  "creativeinventory": {}
+}

@@ -1,0 +1,573 @@
+# Auto Boxes - the guide
+
+Make a block that is **bigger than one block** clickable and solid everywhere you can see it. The size
+is measured **automatically** from the block's own model - you never write a box.
+
+---
+
+# When and why you need the filler
+
+## The problem
+
+Every block in Vintage Story lives in one space - one 1 x 1 x 1 cube of the world. A block's model can be
+drawn bigger than that (a tall statue, a long bench, a big animal), but the game only **checks** a block
+where you look through **its own space**:
+
+- **Clicking:** when you aim at the part that sticks out into the next space, the game looks for a block
+  in *that* space, finds air, and ignores it. You can only click the part inside the block's own space.
+- **Bumping into it:** the same - the game only checks the block's own space, so you walk straight
+  through the part that sticks out.
+
+```
+      +-------+
+      | top   |   <- this space is air: the top of the statue is drawn here,
+      |       |      but you cannot click it or bump into it
+      +-------+
+      | base  |   <- the statue's own space: only this part works
+      |       |
+      +-------+
+```
+
+## What the filler does
+
+Auto Boxes puts an invisible **filler** block in every **empty** space your block reaches - here, the
+space above the statue. Now the game finds a block there, and the filler:
+
+- shows your block's **whole outline**, wherever you aim at it,
+- is **solid** for its part of your block,
+- passes every **click, break, name and help text** on to your block - aiming at the top of the statue is
+  just like aiming at its base,
+- is **never seen** - not drawn, not in the creative tabs or the handbook, drops nothing,
+- **goes away** when your block is broken or picked up.
+
+A space that already holds something (a wall, water, another block) is left alone - that part of your
+block just is not clickable there. Fillers never replace anything a player built.
+
+## Do you need it?
+
+| Your block... | Filler needed? |
+|---|---|
+| fits inside one block | **No** - the game already handles it. (Having the kit in your mod does no harm: no filler is ever placed.) |
+| sticks out into the next space - taller, longer or wider than one block | **Yes** - that is what Auto Boxes is for |
+| only pokes out a tiny bit (less than 1/32 of a block - half a pixel) | **No** - that small an overhang stays part of its own block's box |
+
+Good to know:
+
+- **One filler file per mod**, however many big blocks it has - they all share it.
+- The filler cannot be **built into** - a player cannot place a block in a space your block reaches until
+  your block is picked up. That is on purpose: the space belongs to your block.
+- Fillers are made when your block is **placed**. A big block placed before you added Auto Boxes gets
+  none - break it and place it again.
+
+---
+
+In this guide, replace:
+
+| This | With | Example |
+|---|---|---|
+| `MyMod` | your mod's namespace - the word after `namespace` at the top of your own `.cs` files | `Bookends` |
+| `mymod` | your mod id from `modinfo.json` (lowercase) | `bookends` |
+| `BEYourBlock` | the name of your block entity class | `BEBigShelf` |
+| `BlockYourBlock` | the name of your block class | `BlockBigShelf` |
+
+The kit (folder **AutoBoxes Kit**):
+
+| File | What it is |
+|---|---|
+| `AutoBoxes.cs` | the tools: cutting the box into spaces, placing and removing the fillers |
+| `AutoBoxesFiller.cs` | the invisible filler block |
+| `AutoBoxesMeasure.cs` | measures your block's size from its model |
+| `autoboxesfiller.json` | the filler's blocktype |
+
+---
+
+# PART 1 - once per mod
+
+## 1. Copy the kit into your mod
+
+- `AutoBoxes.cs`, `AutoBoxesFiller.cs` and `AutoBoxesMeasure.cs` -> your mod's code folder (where your
+  other `.cs` files are).
+- `autoboxesfiller.json` -> your mod's `assets/mymod/blocktypes/` folder.
+
+## 2. Set the namespace
+
+Each of the three `.cs` files has this line near the top:
+
+```csharp
+namespace MyMod;   // CHANGE: the namespace your own code files use (the word after "namespace" at their top)
+```
+
+In **all three**, change `MyMod` to your mod's namespace. For example, if your own files say
+`namespace Bookends;`, make it:
+
+```csharp
+namespace Bookends;
+```
+
+## 3. Set your mod id
+
+In `AutoBoxes.cs`, find this line:
+
+```csharp
+    public const string FillerCode = "mymod:autoboxesfiller";   // CHANGE: your mod id (lowercase) before the colon
+```
+
+Change `mymod` to **your mod id**, e.g. `"bookends:autoboxesfiller"`.
+
+## 4. Register the filler
+
+Open your ModSystem file (the class that says `: ModSystem`). Find:
+
+```csharp
+    public override void Start(ICoreAPI api)
+    {
+```
+
+Paste under it:
+
+```csharp
+        api.RegisterBlockClass("MyModAutoBoxesFiller", typeof(BlockAutoBoxesFiller));
+        api.RegisterBlockEntityClass("MyModAutoBoxesFiller", typeof(BEAutoBoxesFiller));
+```
+
+and change `MyMod` **inside the quotes** to your mod's name (e.g. `"BookendsAutoBoxesFiller"`) - every
+mod's filler needs its own name.
+
+Your mod has no `Start` method? Paste this whole method inside your ModSystem class instead:
+
+```csharp
+    public override void Start(ICoreAPI api)
+    {
+        api.RegisterBlockClass("MyModAutoBoxesFiller", typeof(BlockAutoBoxesFiller));
+        api.RegisterBlockEntityClass("MyModAutoBoxesFiller", typeof(BEAutoBoxesFiller));
+    }
+```
+
+## 5. Name the filler in its JSON
+
+Open `autoboxesfiller.json` (the one you copied into `assets/mymod/blocktypes/`). Change these two lines
+to the **same name** you used in step 4:
+
+```json
+  "class": "MyModAutoBoxesFiller",
+  "entityClass": "MyModAutoBoxesFiller",
+```
+
+**Part 1 is done.** You never do it again for this mod.
+
+---
+
+# PART 2 - for each big block
+
+Does your block already have its own `BE...` class and `Block...` class?
+
+- **No** - it is only a JSON file -> do **2A**.
+- **Yes** -> do **2B** (and **2C** if your block entity turns the model itself - 2C says how to tell).
+
+---
+
+## 2A - A block with no code yet
+
+### 2A.1 Make the file
+
+Make a new file in your code folder called `BEYourBlock.cs` and paste all of this in. Then replace
+`BEYourBlock`, `BlockYourBlock` and `MyMod` as in the table at the top.
+
+```csharp
+using System.Collections.Generic;
+using Vintagestory.API.Common;
+using Vintagestory.API.Datastructures;
+using Vintagestory.API.MathTools;
+
+namespace MyMod;
+
+public class BEYourBlock : BlockEntity, IAutoBoxesOwner
+{
+    Cuboidf autoBox;
+    Dictionary<(int x, int y, int z), Cuboidf> autoPieces = new();
+    List<(int x, int y, int z)> autoHeld = new();
+
+    public override void Initialize(ICoreAPI api)
+    {
+        base.Initialize(api);
+        autoBox = AutoBoxesMeasure.FromModel(api, Block);
+        autoPieces = AutoBoxes.Cut(autoBox);
+    }
+
+    public override void OnBlockPlaced(ItemStack byItemStack = null)
+    {
+        base.OnBlockPlaced(byItemStack);
+        if (Api.Side == EnumAppSide.Server) autoHeld = AutoBoxes.Sync(Api.World, Pos, autoPieces.Keys, autoHeld);
+    }
+
+    public override void OnBlockRemoved()
+    {
+        if (Api.Side == EnumAppSide.Server) AutoBoxes.ReleaseAll(Api.World, Pos, autoHeld);
+        base.OnBlockRemoved();
+    }
+
+    public override void ToTreeAttributes(ITreeAttribute tree)
+    {
+        base.ToTreeAttributes(tree);
+        tree.SetString("autoboxesHeld", AutoBoxes.Write(autoHeld));
+    }
+
+    public override void FromTreeAttributes(ITreeAttribute tree, IWorldAccessor worldForResolving)
+    {
+        base.FromTreeAttributes(tree, worldForResolving);
+        autoHeld = AutoBoxes.Read(tree.GetString("autoboxesHeld"));
+    }
+
+    public Cuboidf[] AutoBoxesAt(BlockPos cell)
+    {
+        var o = (cell.X - Pos.X, cell.Y - Pos.Y, cell.Z - Pos.Z);
+        return autoPieces.ContainsKey(o) ? [AutoBoxes.Whole(autoBox, o)] : [];
+    }
+
+    public Cuboidf[] AutoCollisionAt(BlockPos cell) =>
+        AutoBoxes.PieceAt(autoBox, (cell.X - Pos.X, cell.Y - Pos.Y, cell.Z - Pos.Z));
+}
+
+public class BlockYourBlock : Block
+{
+    public override Cuboidf[] GetSelectionBoxes(IBlockAccessor blockAccessor, BlockPos pos)
+    {
+        var auto = (blockAccessor.GetBlockEntity(pos) as IAutoBoxesOwner)?.AutoBoxesAt(pos);
+        if (auto != null && auto.Length > 0) return auto;
+        return base.GetSelectionBoxes(blockAccessor, pos);
+    }
+
+    public override Cuboidf[] GetCollisionBoxes(IBlockAccessor blockAccessor, BlockPos pos)
+    {
+        var auto = (blockAccessor.GetBlockEntity(pos) as IAutoBoxesOwner)?.AutoCollisionAt(pos);
+        if (auto != null && auto.Length > 0) return auto;
+        return base.GetCollisionBoxes(blockAccessor, pos);
+    }
+}
+```
+
+### 2A.2 Register it
+
+In your ModSystem's `Start` method, under the two lines from step 4, paste:
+
+```csharp
+        api.RegisterBlockClass("MyModYourBlock", typeof(BlockYourBlock));
+        api.RegisterBlockEntityClass("MyModYourBlock", typeof(BEYourBlock));
+```
+
+(Again, change `MyMod` inside the quotes to your mod's name, and `YourBlock` to your block.)
+
+### 2A.3 Point your block's JSON at it
+
+Open **your block's** JSON (in `assets/mymod/blocktypes/`). Add these two lines near the top, under
+`"code"`:
+
+```json
+  "class": "MyModYourBlock",
+  "entityClass": "MyModYourBlock",
+```
+
+If it already has a `"class"` line, replace it with these.
+
+**Done** - go to **Test it** at the bottom.
+
+---
+
+## 2B - A block that already has its own code
+
+You add pieces to your existing `BEYourBlock` and `BlockYourBlock`. Your own code stays as it is.
+
+Each step says what to **find**, then what to **paste**. If a step says "don't have one?", paste the
+whole method instead - put it just above the **last `}`** of the class.
+
+### In your block entity file (`BEYourBlock`)
+
+**B1 - The top of the file.** Find the `using` lines at the top. Paste these under them (skip any that
+are already there):
+
+```csharp
+using System.Collections.Generic;
+using Vintagestory.API.Datastructures;
+using Vintagestory.API.MathTools;
+```
+
+**B2 - The class line.** Find your class line. It looks like:
+
+```csharp
+public class BEYourBlock : BlockEntity
+```
+
+Add `, IAutoBoxesOwner` to the end of it:
+
+```csharp
+public class BEYourBlock : BlockEntity, IAutoBoxesOwner
+```
+
+(If it already has more after `BlockEntity`, put `, IAutoBoxesOwner` at the very end, before any `{`.)
+
+**B3 - Three lines at the start of the class.** Find the `{` straight after your class line. Paste
+under it:
+
+```csharp
+    Cuboidf autoBox;
+    Dictionary<(int x, int y, int z), Cuboidf> autoPieces = new();
+    List<(int x, int y, int z)> autoHeld = new();
+```
+
+**B4 - Initialize.** Find `base.Initialize(api);` (inside `public override void Initialize(ICoreAPI api)`).
+Paste under it:
+
+```csharp
+        autoBox = AutoBoxesMeasure.FromModel(api, Block);
+        autoPieces = AutoBoxes.Cut(autoBox);
+```
+
+Don't have an `Initialize`? Paste this whole method:
+
+```csharp
+    public override void Initialize(ICoreAPI api)
+    {
+        base.Initialize(api);
+        autoBox = AutoBoxesMeasure.FromModel(api, Block);
+        autoPieces = AutoBoxes.Cut(autoBox);
+    }
+```
+
+**B5 - OnBlockPlaced.** In your **block entity** file, find `base.OnBlockPlaced(byItemStack);` - it is inside
+`public override void OnBlockPlaced(ItemStack byItemStack = null)`. (Your **block** file may have an
+`OnBlockPlaced` too, with `world` and `blockPos` in its brackets - that is a different one, leave it alone.)
+Paste under it:
+
+```csharp
+        if (Api.Side == EnumAppSide.Server) autoHeld = AutoBoxes.Sync(Api.World, Pos, autoPieces.Keys, autoHeld);
+```
+
+Don't have an `OnBlockPlaced`? Paste this whole method:
+
+```csharp
+    public override void OnBlockPlaced(ItemStack byItemStack = null)
+    {
+        base.OnBlockPlaced(byItemStack);
+        if (Api.Side == EnumAppSide.Server) autoHeld = AutoBoxes.Sync(Api.World, Pos, autoPieces.Keys, autoHeld);
+    }
+```
+
+**B6 - OnBlockRemoved.** In your **block entity** file, find `base.OnBlockRemoved();` - it is inside
+`public override void OnBlockRemoved()` (empty brackets). Paste **ABOVE** it (not under):
+
+```csharp
+        if (Api.Side == EnumAppSide.Server) AutoBoxes.ReleaseAll(Api.World, Pos, autoHeld);
+```
+
+Don't have an `OnBlockRemoved`? Paste this whole method:
+
+```csharp
+    public override void OnBlockRemoved()
+    {
+        if (Api.Side == EnumAppSide.Server) AutoBoxes.ReleaseAll(Api.World, Pos, autoHeld);
+        base.OnBlockRemoved();
+    }
+```
+
+**B7 - ToTreeAttributes.** Find `base.ToTreeAttributes(tree);`. Paste under it:
+
+```csharp
+        tree.SetString("autoboxesHeld", AutoBoxes.Write(autoHeld));
+```
+
+Don't have a `ToTreeAttributes`? Paste this whole method:
+
+```csharp
+    public override void ToTreeAttributes(ITreeAttribute tree)
+    {
+        base.ToTreeAttributes(tree);
+        tree.SetString("autoboxesHeld", AutoBoxes.Write(autoHeld));
+    }
+```
+
+**B8 - FromTreeAttributes.** Find the `base.FromTreeAttributes(...)` line. Paste under it:
+
+```csharp
+        autoHeld = AutoBoxes.Read(tree.GetString("autoboxesHeld"));
+```
+
+Don't have a `FromTreeAttributes`? Paste this whole method:
+
+```csharp
+    public override void FromTreeAttributes(ITreeAttribute tree, IWorldAccessor worldForResolving)
+    {
+        base.FromTreeAttributes(tree, worldForResolving);
+        autoHeld = AutoBoxes.Read(tree.GetString("autoboxesHeld"));
+    }
+```
+
+**B9 - Two new methods.** Find the **last `}`** of your block entity class. Paste ABOVE it:
+
+```csharp
+    public Cuboidf[] AutoBoxesAt(BlockPos cell)
+    {
+        var o = (cell.X - Pos.X, cell.Y - Pos.Y, cell.Z - Pos.Z);
+        return autoPieces.ContainsKey(o) ? [AutoBoxes.Whole(autoBox, o)] : [];
+    }
+
+    public Cuboidf[] AutoCollisionAt(BlockPos cell) =>
+        AutoBoxes.PieceAt(autoBox, (cell.X - Pos.X, cell.Y - Pos.Y, cell.Z - Pos.Z));
+```
+
+### In your block file (`BlockYourBlock`)
+
+**B10 - The top of the file.** Paste under the `using` lines (skip it if it is already there):
+
+```csharp
+using Vintagestory.API.MathTools;
+```
+
+**B11 - The outline.** Does your block class already have `GetSelectionBoxes`?
+
+- **Yes:** find its first `{`. Paste under it:
+
+```csharp
+        var autoSel = (blockAccessor.GetBlockEntity(pos) as IAutoBoxesOwner)?.AutoBoxesAt(pos);
+        if (autoSel != null && autoSel.Length > 0) return autoSel;
+```
+
+- **No:** find the **last `}`** of your block class and paste ABOVE it:
+
+```csharp
+    public override Cuboidf[] GetSelectionBoxes(IBlockAccessor blockAccessor, BlockPos pos)
+    {
+        var autoSel = (blockAccessor.GetBlockEntity(pos) as IAutoBoxesOwner)?.AutoBoxesAt(pos);
+        if (autoSel != null && autoSel.Length > 0) return autoSel;
+        return base.GetSelectionBoxes(blockAccessor, pos);
+    }
+```
+
+**B12 - The solid part.** Does your block class already have `GetCollisionBoxes`?
+
+- **Yes:** find its first `{`. Paste under it:
+
+```csharp
+        var autoCol = (blockAccessor.GetBlockEntity(pos) as IAutoBoxesOwner)?.AutoCollisionAt(pos);
+        if (autoCol != null && autoCol.Length > 0) return autoCol;
+```
+
+- **No:** find the **last `}`** of your block class and paste ABOVE it:
+
+```csharp
+    public override Cuboidf[] GetCollisionBoxes(IBlockAccessor blockAccessor, BlockPos pos)
+    {
+        var autoCol = (blockAccessor.GetBlockEntity(pos) as IAutoBoxesOwner)?.AutoCollisionAt(pos);
+        if (autoCol != null && autoCol.Length > 0) return autoCol;
+        return base.GetCollisionBoxes(blockAccessor, pos);
+    }
+```
+
+(If your existing method is written on one line with `=>` instead of `{ }`, use the "No" version and
+delete your old one.)
+
+**Different words in the brackets?** The pasted lines use the names `blockAccessor` and `pos`. If your
+existing method's first line uses other names - say `GetSelectionBoxes(IBlockAccessor ba, BlockPos position)` -
+change `blockAccessor` and `pos` in the lines you pasted to match. The same goes for `api` in B4 and `tree` in
+B7 and B8.
+
+**Your block's JSON needs nothing** - it already points at your classes.
+
+**Done** - unless your block entity turns its model itself: then do **2C**. Otherwise go to **Test it**.
+
+---
+
+## 2C - Only if your block entity turns the model itself
+
+**Do you need this?** Look in your block entity for an angle that turns the model - usually a line like:
+
+```csharp
+blockMesh = blockMesh.Rotate(new Vec3f(0.5f, 0.0f, 0.5f), 0f, MeshAngleRad, 0f);
+```
+
+If your block is turned that way (it faces you when placed, but has no north / east / south / west
+versions in its JSON), the box has to be turned by the same angle - otherwise it stays facing one way.
+Do 2B first, then these four steps. In them, `MeshAngleRad` is the name of your angle - use yours.
+
+**C1 - Measure with the turn.** In your block entity, find the two lines you pasted in B4:
+
+```csharp
+        autoBox = AutoBoxesMeasure.FromModel(api, Block);
+        autoPieces = AutoBoxes.Cut(autoBox);
+```
+
+Replace both with this one line:
+
+```csharp
+        AutoBoxesMeasureTurned();
+```
+
+**C2 - Two new methods.** Find the **last `}`** of your block entity class. Paste ABOVE it:
+
+```csharp
+    void AutoBoxesMeasureTurned()
+    {
+        autoBox = AutoBoxesMeasure.FromModel(Api, Block)?.RotatedCopyRad(0f, MeshAngleRad, 0f, new Vec3d(0.5, 0.0, 0.5));
+        autoPieces = AutoBoxes.Cut(autoBox);
+    }
+
+    public void AutoBoxesAngleChanged()
+    {
+        AutoBoxesMeasureTurned();
+        if (Api.Side == EnumAppSide.Server) autoHeld = AutoBoxes.Sync(Api.World, Pos, autoPieces.Keys, autoHeld);
+    }
+```
+
+**C3 - When the angle is loaded.** In your block entity's `FromTreeAttributes`, find the line that reads
+your angle, for example:
+
+```csharp
+        MeshAngleRad = tree.GetFloat("meshAngleRad", 0f);
+```
+
+Paste under it:
+
+```csharp
+        if (Api != null) AutoBoxesMeasureTurned();
+```
+
+**C4 - When the angle is set.** Find where your code sets the angle when the block is placed - usually in
+your **block** file, inside `TryPlaceBlock` or `OnBlockPlaced`, a line like:
+
+```csharp
+                be.MeshAngleRad = angle;
+```
+
+Paste under it (use the name your code uses for the block entity there - here `be`):
+
+```csharp
+                be.AutoBoxesAngleChanged();
+```
+
+If something else can turn the block later (a wrench, a menu), paste the same line after it sets the
+angle there too.
+
+**Done** - go to **Test it**.
+
+---
+
+# Test it
+
+1. Build your mod and start the game.
+2. Place your big block with **empty space** around it.
+3. Aim at the part outside its own block: the **whole** outline shows, and right-click / break work there.
+4. Walk into it: it is solid.
+5. Break it: nothing invisible is left behind.
+
+A block placed **before** you added Auto Boxes gets no fillers - break it and place it again.
+
+# If something is wrong
+
+| You see | Check |
+|---|---|
+| Build error: `AutoBoxes` / `IAutoBoxesOwner` / `AutoBoxesMeasure` not found | step 1 (the three files are in your code folder) and step 2 (their `namespace` line is the SAME as the one at the top of your own file) |
+| Build error: `Dictionary` / `List` / `Cuboidf` not found | B1 / B10 - the `using` lines at the top of your file |
+| Only its own block is clickable, nothing outside | step 3 (`FillerCode` has your mod id) and step 5 (the filler JSON's names match step 4) |
+| Game log: block class / entity class not found | the names in quotes in step 4 / 2A.2 match the JSON names |
+| Game log: `Could not measure` | the block's model path in its JSON (`shape` -> `base`) |
+| The box does not turn with the block | **2C** - your block entity turns its model itself |
+| One part not clickable | something is already in that space (wall, water, another block) - fillers only go into empty air |
